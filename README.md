@@ -43,7 +43,7 @@ Starts the actual sandbox.
 
 ## Accessing the sandbox
 
-By default, QEMU exposes to ports for each sandbox. An ssh port (starting at `5555`) and an "app port" that can be used by some app in the vm (starting at `8000`). Ports should be configurable in the future.
+By default, QEMU exposes two ports for each sandbox. An ssh port (starting at `5555`) and an "app port" that can be used by some app in the vm (starting at `8000`). Ports should be configurable in the future.
 
 ## Tips for custom images
 
