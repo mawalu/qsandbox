@@ -1,0 +1,161 @@
+#!/bin/bash
+
+script_dir="$( cd -- "$( dirname -- "$(readlink -f "${BASH_SOURCE[0]}" )" )" &> /dev/null && pwd )"
+qemu_args=()
+
+function run_virtiofsd {
+  local shares=("$@")
+  local share_count=1
+
+  {
+    echo "mount -t tmpfs swap /var/run"
+    for m in "${shares[@]}"; do
+      local share_name="share.${share_count}"
+      local socket="$tmp_dir/$share_name"
+ 
+      echo "/usr/lib/qemu/virtiofsd --socket-path=$socket -o source=$m &"
+      echo "echo starting $m $socket"
+
+      share_count=$((share_count+1))
+    done
+  } | (unshare --user --map-root-user --mount bash)&
+
+  local mounts=${#shares[@]}
+
+  for i in $(seq "$mounts"); do
+    qemu_args+=("-chardev" "socket,id=share.$i,path=$tmp_dir/share.$i")
+    qemu_args+=("-device" "vhost-user-fs-pci,queue-size=1024,chardev=share.$i,tag=share.$i")
+  done
+
+}
+
+function start_qemu {
+  if [[ $# -lt 3 ]]; then
+    echo "Usage $(basename "$0") qemu <ssh_port> <app_port> <tmp_dir> [mount]"
+    exit 1
+  fi
+
+  trap finish EXIT
+
+  local ssh_port="$1"
+  local app_port="$2"
+  tmp_dir="$3"
+
+  local image
+  image="$tmp_dir/$(openssl rand -hex 12).qcow2"
+
+  qemu-img create -b "$script_dir/image/image.qcow2" -F qcow2 -f qcow2 "$image"
+
+  run_virtiofsd "${4:-$PWD}"
+
+  qemu-system-x86_64 \
+     -enable-kvm -cpu host -m 512m -smp 2 \
+     -kernel "$script_dir/image/vmlinuz-linux" -append "earlyprintk=ttyS0 console=ttyS0 root=/dev/vda rw quiet" \
+     -initrd "$script_dir/image/initramfs-linux-custom.img" \
+     -m 4G -object memory-backend-file,id=mem,size=4G,mem-path=/dev/shm,share=on -numa node,memdev=mem \
+     -device virtio-rng-pci \
+     -bios /usr/share/qemu/qboot.rom \
+     -drive if=virtio,file="$image",format=qcow2 \
+     -netdev user,id=net0,hostfwd=tcp::"$ssh_port"-:22,hostfwd=tcp::"$app_port"-:8000 \
+     -device virtio-net-pci,netdev=net0 \
+     -nodefaults -no-user-config -nographic \
+     -serial stdio "${qemu_args[@]}"
+}
+
+function get_port {
+  local port="$1"
+
+  if netstat -tulen | grep -q "$port"; then
+    get_port "$((port+1))"
+  else
+    echo "$port"
+  fi
+}
+
+function run {
+  local ssh_port
+  ssh_port="$(get_port 5555)"
+  local app_port
+  app_port="$(get_port 8000)"
+
+  local work_dir="${1:-$PWD}"
+
+  tmp_dir="$(mktemp -d --suffix=.qemu)"
+
+  echo "$work_dir"
+
+  echo "$ssh_port" > "$tmp_dir/ssh"
+  echo "$ssh_port" > "$tmp_dir/app"
+  echo "$work_dir" > "$tmp_dir/work_dir"
+
+  systemd-run --user -d "$0" qemu "$ssh_port" "$app_port" "$tmp_dir" "$work_dir"
+  
+  echo "[ ] SSH Port: $ssh_port"
+  echo "[ ] App Port: $app_port"
+
+  sleep 1
+  enter "$ssh_port"
+}
+
+function finish {
+  rm -rf "$tmp_dir" 
+}
+
+function list {
+  for d in /tmp/*.qemu; do
+    if [[ -f "$d/ssh" ]]; then
+      echo "$(cat "$d/ssh") - $(cat "$d/work_dir")"
+    fi
+  done
+}
+
+function enter {
+  if [[ "$#" -eq 1 ]]; then
+    local port="$1"
+  else
+    echo "Using default port 5555"
+    local port="5555"
+  fi
+
+  ssh -i "$script_dir/ssh/qemu_ssh" -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@localhost -p "$port" 
+}
+
+function usage {
+  local bin
+  bin="$(basename "$0")"
+
+  echo "Usage:"
+  echo "       $bin run [dir]  - start sandbox and mount current working dir"
+  echo "       $bin list       - list running sandboxes"
+  echo "       $bin enter      - open ssh connection to a sandbox"
+  echo "       $bin qemu       - start the qemu process for a new sandbox, used by run"
+}
+
+function main {
+  if [[ "$#" -lt 1 ]]; then
+    usage "$@"
+    exit 1
+  fi
+
+  local cmd="$1"
+  shift
+
+  if [[ "$cmd" == "qemu" ]]; then
+    start_qemu "$@"
+  fi
+
+  if [[ "$cmd" == "list" ]]; then
+    list
+  fi
+
+  if [[ "$cmd" == "run" ]]; then
+    run "$@"
+  fi
+
+  if [[ "$cmd" == "enter" ]]; then
+    enter "$@"
+  fi
+}
+
+main "$@"
+
