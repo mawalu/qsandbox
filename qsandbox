@@ -82,8 +82,6 @@ function run {
 
   tmp_dir="$(mktemp -d --suffix=.qemu)"
 
-  echo "$work_dir"
-
   echo "$ssh_port" > "$tmp_dir/ssh"
   echo "$ssh_port" > "$tmp_dir/app"
   echo "$work_dir" > "$tmp_dir/work_dir"

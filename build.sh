@@ -1,7 +1,8 @@
 #!/bin/bash
 # Based on https://blog.stefan-koch.name/2020/05/31/automation-archlinux-qemu-installation
 
-src=https://ftp.halifax.rwth-aachen.de/archlinux/iso/2021.11.01/archlinux-bootstrap-2021.11.01-x86_64.tar.gz
+src="https://mirror.rackspace.com/archlinux/iso/2021.11.01/archlinux-bootstrap-2021.11.01-x86_64.tar.gz"
+
 archive=image/archlinux.tar.gz
 image=image/image.raw
 mountpoint=image/arch
@@ -14,6 +15,7 @@ mkdir -p $mountpoint
 mkdir -p ssh
 
 qemu-img create -f raw $image 20G
+
 loop="$(sudo losetup --show -f -P $image)"
 sudo mkfs.ext4 "$loop"
 sudo mount "$loop" "$mountpoint"
@@ -24,16 +26,14 @@ key="$(cat ssh/qemu_ssh.pub)"
 sudo "$mountpoint/bin/arch-chroot" "$mountpoint" /bin/bash <<EOL
 set -v
 
-echo 'Server = http://ftp.uni-bayreuth.de/linux/archlinux/\$repo/os/\$arch' >> /etc/pacman.d/mirrorlist
+echo 'Server = https://mirror.rackspace.com/archlinux/\$repo/os/\$arch' >> /etc/pacman.d/mirrorlist
 
 pacman-key --init
 pacman-key --populate archlinux
 
 pacman -Syu --noconfirm
-pacman -S --noconfirm base linux linux-firmware mkinitcpio dhcpcd dropbear kitty-terminfo
-systemctl enable dhcpcd dropbear
-
-dropbearkey -t ed25519 -f /etc/dropbear/dropbear_ed25519_host_key
+pacman -S --noconfirm base linux linux-firmware mkinitcpio openssh kitty-terminfo
+systemctl enable sshd
 
 # Standard Archlinux Setup
 ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime

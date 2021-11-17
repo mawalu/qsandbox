@@ -1,6 +1,6 @@
 # qemu-sandbox
 
-PoC shell sandboxing using QEMU and virtiofsd. Just enter `qsandbox run` to open your current working dir in a temporary QEMU vm.
+PoC shell sandboxing using QEMU and virtiofsd. Simply enter  `qsandbox run` to open your current working dir in a temporary QEMU vm.
 
 ## Installation
 

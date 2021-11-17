@@ -1,3 +1,5 @@
 ssh/*
 image/*
 !**/.gitkeep
+.idea
+nim/qsandbox
