@@ -32,8 +32,8 @@ pacman-key --init
 pacman-key --populate archlinux
 
 pacman -Syu --noconfirm
-pacman -S --noconfirm base linux linux-firmware mkinitcpio openssh kitty-terminfo
-systemctl enable sshd
+pacman -S --noconfirm base linux linux-firmware mkinitcpio openssh kitty-terminfo dhcpcd
+systemctl enable sshd dhcpcd
 
 # Standard Archlinux Setup
 ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime
